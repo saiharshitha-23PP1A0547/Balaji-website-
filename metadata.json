@@ -1,0 +1,6 @@
+{
+  "name": "Balaji Mutton Shop",
+  "description": "Balaji Mutton Shop — a trusted 40+ year family legacy offering fresh mutton, live goats, live sheep, and special & bulk orders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

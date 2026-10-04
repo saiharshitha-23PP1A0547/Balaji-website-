@@ -1,0 +1,5 @@
+# Robots.txt for Balaji Mutton Shop
+User-agent: *
+Allow: /
+
+Sitemap: https://balajimuttonshop.com/sitemap.xml

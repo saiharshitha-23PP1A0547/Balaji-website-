@@ -1,0 +1,212 @@
+{
+  "adminUser": {
+    "username": "admin",
+    "email": "admin@balajimuttonshop.com",
+    "salt": "e4562c812f831c49d2abec4fdcbfa438",
+    "passwordHash": "2708c4fa5aca54c96348ec66ead78b9c1d97f5dea1aed638a101eea26e21b2f9577418729c82ce2c0407400c47d1fa55642959360625f56e9f3e7bbeb7fc29b1",
+    "updatedAt": "2026-10-04T12:02:34.869Z"
+  },
+  "config": {
+    "BUSINESS_NAME": "Balaji Mutton Shop",
+    "PHONE_NUMBER": "+91 9XXXXXXXXX",
+    "WHATSAPP_NUMBER": "+91 9XXXXXXXXX",
+    "SHOP_ADDRESS": "[Shop Address, Landmark, City, State - PIN Code]",
+    "GOOGLE_MAPS_URL": "https://maps.google.com/?q=Balaji+Mutton+Shop",
+    "OPENING_HOURS": "Tuesday to Sunday: 7:00 AM – 1:30 PM & 5:00 PM – 8:30 PM | Monday: Limited / Call in advance",
+    "SHOP_STATUS": "OPEN",
+    "ANNOUNCEMENT_ENABLED": false,
+    "ANNOUNCEMENT_MESSAGE": "Shop will be closed today due to a family function. We will reopen tomorrow at 7:00 AM.",
+    "REOPENING_DATE": "",
+    "REOPENING_TIME": "",
+    "SPECIAL_HOURS_MESSAGE": "Open today: 7:00 AM – 1:30 PM only",
+    "MUTTON_PRICE_PER_KG": 1000,
+    "MUTTON_AVAILABLE": true,
+    "MUTTON_NOTICE": "Daily Fresh Cut · Weighed and prepared fresh upon order"
+  },
+  "orderSettings": {
+    "muttonTemplate": "Hello Balaji Mutton Shop, I would like to order {quantity} of fresh mutton ({cut}). Estimated price: {price}. Customer: {customer}.",
+    "bulkTemplate": "Hello Balaji Mutton Shop, I would like to place a bulk order for {occasion} on {date}. Requirement: {quantity}. Name: {name}, Phone: {phone}.",
+    "generalTemplate": "Hello Balaji Mutton Shop, I would like to place an order."
+  },
+  "photos": [
+    {
+      "id": "legacy-founder",
+      "number": 1,
+      "title": "Founder Kamtekar Eshwar Ji",
+      "category": "Heritage",
+      "description": "Our founder Kamtekar Eshwar Ji who established our family shop over 40 years ago.",
+      "placeholderLabel": "Kamtekar Eshwar Ji (Founder Photo)",
+      "imageKey": "founder",
+      "altText": "Kamtekar Eshwar Ji founder of Balaji Mutton Shop",
+      "customUrl": null
+    },
+    {
+      "id": "shop-old",
+      "number": 2,
+      "title": "Original Shop Front (1980s)",
+      "category": "Heritage",
+      "description": "Early days archival photo of our original shop premises and traditional weighing scale.",
+      "placeholderLabel": "Old Shop Photo (1980s Archival)",
+      "imageKey": "old-shop",
+      "altText": "Historical photo of Balaji Mutton Shop in 1980s",
+      "customUrl": null
+    },
+    {
+      "id": "shop-current",
+      "number": 3,
+      "title": "Current Shop Exterior",
+      "category": "Shop",
+      "description": "Our modern shop storefront welcoming customers with pristine cleanliness.",
+      "placeholderLabel": "Current Balaji Mutton Shop Storefront",
+      "imageKey": "current-shop",
+      "altText": "Current exterior of Balaji Mutton Shop",
+      "customUrl": null
+    },
+    {
+      "id": "mutton-fresh",
+      "number": 4,
+      "title": "Fresh Daily Cuts",
+      "category": "Craft",
+      "description": "Tender, fresh, healthy daily mutton cuts prepared according to traditional methods.",
+      "placeholderLabel": "Fresh Mutton Daily Cut Display",
+      "imageKey": "fresh-mutton",
+      "altText": "Fresh healthy mutton cuts at Balaji Mutton Shop",
+      "customUrl": null
+    },
+    {
+      "id": "shop-interior",
+      "number": 5,
+      "title": "Hygienic Interior & Cutting Area",
+      "category": "Shop",
+      "description": "Stainless steel sanitized preparation surfaces adhering to high cleanliness standards.",
+      "placeholderLabel": "Clean Shop Interior & Sanitized Counters",
+      "imageKey": "interior",
+      "altText": "Clean preparation area inside Balaji Mutton Shop",
+      "customUrl": null
+    },
+    {
+      "id": "cutting-craft",
+      "number": 6,
+      "title": "Traditional Cleaver Cutting",
+      "category": "Craft",
+      "description": "Decades of knife and cleaver precision cutting tailored to culinary dishes.",
+      "placeholderLabel": "Traditional Cleaver Butchering Craft",
+      "imageKey": "butchering",
+      "altText": "Traditional butchering knife craft at Balaji Mutton Shop",
+      "customUrl": null
+    },
+    {
+      "id": "packing-hygiene",
+      "number": 7,
+      "title": "Clean Food-Grade Packing",
+      "category": "Craft",
+      "description": "Careful food-grade packaging preserving freshness from counter to kitchen.",
+      "placeholderLabel": "Clean Packaging & Careful Handling",
+      "imageKey": "packaging",
+      "altText": "Hygienic packaging for mutton orders at Balaji Mutton Shop",
+      "customUrl": null
+    },
+    {
+      "id": "livestock-goats",
+      "number": 8,
+      "title": "Healthy Grazing Goats",
+      "category": "Livestock",
+      "description": "Active, healthy country goats directly sourced from trusted regional farms.",
+      "placeholderLabel": "Healthy Live Goats on Farm / Pen",
+      "imageKey": "live-goats",
+      "altText": "Healthy live goats at Balaji Mutton Shop",
+      "customUrl": null
+    },
+    {
+      "id": "livestock-sheep",
+      "number": 9,
+      "title": "Carefully Sourced Live Sheep",
+      "category": "Livestock",
+      "description": "Prime condition sheep selected specifically for major events, feasts, and rituals.",
+      "placeholderLabel": "Prime Live Sheep Selection",
+      "imageKey": "live-sheep",
+      "altText": "Prime condition live sheep selection at Balaji Mutton Shop",
+      "customUrl": null
+    },
+    {
+      "id": "family-craftsmen",
+      "number": 10,
+      "title": "Proprietors Badrinath & Shyam",
+      "category": "Heritage",
+      "description": "Current proprietors continuing our grandfather Kamtekar Eshwar Ji’s legacy.",
+      "placeholderLabel": "Proprietors Kamtekar Badrinath & Shyam",
+      "imageKey": "proprietors",
+      "altText": "Proprietors Kamtekar Badrinath and Shyam at Balaji Mutton Shop",
+      "customUrl": null
+    },
+    {
+      "id": "bulk-functions",
+      "number": 11,
+      "title": "Wedding & Celebration Orders",
+      "category": "Events",
+      "description": "Large-scale bulk orders prepared on time with consistent tenderness.",
+      "placeholderLabel": "Special Occasion & Bulk Order Preparation",
+      "imageKey": "bulk-orders",
+      "altText": "Bulk mutton preparation for wedding celebrations at Balaji Mutton Shop",
+      "customUrl": null
+    }
+  ],
+  "muttonItems": [
+    {
+      "id": "item-fresh-mutton",
+      "name": "Fresh Mutton",
+      "pricePerKg": 1000,
+      "available": true,
+      "description": "Prime daily fresh bone-in tender mutton, cleanly trimmed and weighed fresh upon order.",
+      "imageUrl": "/images/mutton.jpg"
+    },
+    {
+      "id": "item-boti",
+      "name": "Boti",
+      "pricePerKg": null,
+      "available": true,
+      "description": "Fresh, cleaned and thoroughly washed boti prepared traditionally.",
+      "imageUrl": null
+    },
+    {
+      "id": "item-kallu",
+      "name": "Kallu (Trotters)",
+      "pricePerKg": null,
+      "available": true,
+      "description": "Fresh mutton trotters (paya), roasted and cleaned for traditional paya soup and rich gravy.",
+      "imageUrl": null
+    },
+    {
+      "id": "item-talakaya",
+      "name": "Talakaya (Mutton Head)",
+      "pricePerKg": null,
+      "available": true,
+      "description": "Fresh mutton head meat cleanly prepared, charred and cut per customer recipe.",
+      "imageUrl": null
+    },
+    {
+      "id": "item-liver",
+      "name": "Liver",
+      "pricePerKg": null,
+      "available": true,
+      "description": "Fresh, nutrient-rich tender mutton liver cut cleanly without excess moisture.",
+      "imageUrl": null
+    },
+    {
+      "id": "item-mutton-pieces",
+      "name": "Mutton pieces",
+      "pricePerKg": null,
+      "available": true,
+      "description": "Special choice cut mutton pieces selected for curry, fry, or biryani preparations.",
+      "imageUrl": null
+    },
+    {
+      "id": "item-custom-request",
+      "name": "Other / Custom Request",
+      "pricePerKg": null,
+      "available": true,
+      "description": "Special butcher requests, specific organs, ribs, or custom celebration orders.",
+      "imageUrl": null
+    }
+  ]
+}
