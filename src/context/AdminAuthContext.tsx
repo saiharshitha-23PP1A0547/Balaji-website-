@@ -38,7 +38,8 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         headers: getAuthHeader(),
       });
 
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         if (data.authenticated && data.user) {
           setUser(data.user);
@@ -70,11 +71,27 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         body: JSON.stringify({ username, password }),
       });
 
-      const data = await res.json();
+      let data: any = null;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          data = await res.json();
+        } catch {
+          data = null;
+        }
+      }
+
+      if (!data) {
+        setIsLoading(false);
+        return {
+          success: false,
+          error: `Server communication error (${res.status}). Please try again.`,
+        };
+      }
 
       if (!res.ok || !data.success) {
         setIsLoading(false);
-        return { success: false, error: data.error || 'Authentication failed' };
+        return { success: false, error: data.error || 'Invalid credentials' };
       }
 
       if (data.token) {
