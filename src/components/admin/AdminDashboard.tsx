@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAdminAuth, getAdminAuthHeaders } from '../../context/AdminAuthContext';
 import { MuttonItem, DEFAULT_MUTTON_ITEMS } from '../../config/businessConfig';
+import { collection, query, orderBy, onSnapshot, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import {
   Store,
   Bell,
@@ -23,6 +25,8 @@ import {
   Check,
   XCircle,
   Tag,
+  ShoppingBag,
+  Phone,
 } from 'lucide-react';
 
 interface ShopConfig {
@@ -61,7 +65,18 @@ interface PhotoItem {
   customUrl: string | null;
 }
 
-type TabType = 'status' | 'announcement' | 'business' | 'mutton' | 'photos' | 'orders' | 'security';
+interface CustomerOrder {
+  id: string;
+  customerName: string;
+  phone: string;
+  address: string;
+  items: string;
+  totalAmount: number;
+  orderStatus: string;
+  createdAt?: any;
+}
+
+type TabType = 'status' | 'announcement' | 'business' | 'mutton' | 'photos' | 'customer-orders' | 'whatsapp' | 'security';
 
 export const AdminDashboard: React.FC = () => {
   const { user, logout } = useAdminAuth();
@@ -158,6 +173,92 @@ export const AdminDashboard: React.FC = () => {
   useEffect(() => {
     fetchAdminData();
   }, []);
+
+  // Real-time Firestore customer orders listener
+  const [customerOrders, setCustomerOrders] = useState<CustomerOrder[]>([]);
+  const [newOrderAlert, setNewOrderAlert] = useState<CustomerOrder | null>(null);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState<number>(0);
+
+  useEffect(() => {
+    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: CustomerOrder[] = [];
+        let pending = 0;
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const order: CustomerOrder = {
+            id: docSnap.id,
+            customerName: data.customerName || 'Customer',
+            phone: data.phone || '',
+            address: data.address || '',
+            items: data.items || '',
+            totalAmount: data.totalAmount || 0,
+            orderStatus: data.orderStatus || 'Pending',
+            createdAt: data.createdAt,
+          };
+          list.push(order);
+          if (order.orderStatus === 'Pending') {
+            pending++;
+          }
+        });
+
+        if (customerOrders.length > 0 && list.length > customerOrders.length) {
+          const newest = list[0];
+          setNewOrderAlert(newest);
+          try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.8);
+            osc.stop(ctx.currentTime + 0.8);
+          } catch {
+            // Audio policy fallback
+          }
+          setTimeout(() => setNewOrderAlert(null), 6000);
+        }
+
+        setCustomerOrders(list);
+        setPendingOrdersCount(pending);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'orders');
+      }
+    );
+
+    return () => unsubscribe();
+  }, [customerOrders.length]);
+
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        orderStatus: newStatus,
+      });
+      setSaveSuccess(`Order status updated to "${newStatus}"`);
+      setTimeout(() => setSaveSuccess(null), 3000);
+    } catch (err: unknown) {
+      handleFirestoreError(err, OperationType.UPDATE, `orders/${orderId}`);
+      setSaveError('Failed to update order status');
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!confirm('Are you sure you want to delete this order record?')) return;
+    try {
+      await deleteDoc(doc(db, 'orders', orderId));
+      setSaveSuccess('Order deleted successfully');
+      setTimeout(() => setSaveSuccess(null), 3000);
+    } catch (err: unknown) {
+      handleFirestoreError(err, OperationType.DELETE, `orders/${orderId}`);
+      setSaveError('Failed to delete order');
+    }
+  };
 
   const handleSaveConfig = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -524,6 +625,28 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </header>
 
+      {/* Real-Time New Order Alert Banner */}
+      {newOrderAlert && (
+        <div className="bg-[#6B121C] text-white text-xs font-semibold py-3 px-6 shadow-xl animate-bounce flex items-center justify-between gap-3 border-b-2 border-[#C5A059] z-40">
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping" />
+            <span>
+              🔔 <strong>New Customer Order!</strong> {newOrderAlert.customerName} ordered {newOrderAlert.items} (₹{newOrderAlert.totalAmount})
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('customer-orders');
+              setNewOrderAlert(null);
+            }}
+            className="px-3 py-1 rounded bg-[#C5A059] text-black font-bold hover:bg-[#d6b068] text-xs cursor-pointer"
+          >
+            View Orders ({pendingOrdersCount})
+          </button>
+        </div>
+      )}
+
       {/* Notifications Bar */}
       {saveSuccess && (
         <div className="bg-emerald-600 text-white text-xs font-semibold py-2.5 px-4 text-center shadow-md animate-in fade-in flex items-center justify-center gap-2">
@@ -629,15 +752,33 @@ export const AdminDashboard: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => setActiveTab('orders')}
+                  onClick={() => setActiveTab('customer-orders')}
                   className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    activeTab === 'orders'
+                    activeTab === 'customer-orders'
+                      ? 'bg-[#6B121C] text-white shadow-xs'
+                      : 'text-[#5A504D] hover:bg-[#FAF8F5] hover:text-[#1F1B1A]'
+                  }`}
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  <span className="flex-1 text-left">F. Customer Orders</span>
+                  {pendingOrdersCount > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-400 text-black font-bold animate-pulse">
+                      {pendingOrdersCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('whatsapp')}
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === 'whatsapp'
                       ? 'bg-[#6B121C] text-white shadow-xs'
                       : 'text-[#5A504D] hover:bg-[#FAF8F5] hover:text-[#1F1B1A]'
                   }`}
                 >
                   <MessageSquare className="w-4 h-4" />
-                  <span className="flex-1 text-left">F. WhatsApp Order Settings</span>
+                  <span className="flex-1 text-left">G. WhatsApp Order Settings</span>
                 </button>
 
                 <div className="pt-2 border-t border-[#E8E2D8]">
@@ -1712,9 +1853,151 @@ export const AdminDashboard: React.FC = () => {
               )}
 
               {/* ========================================================= */}
-              {/* TAB F: ORDER SETTINGS */}
+              {/* TAB F: CUSTOMER ORDERS (REAL-TIME) */}
               {/* ========================================================= */}
-              {activeTab === 'orders' && (
+              {activeTab === 'customer-orders' && (
+                <div className="space-y-6">
+                  <div className="border-b border-[#E8E2D8] pb-4 flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                      <h2 className="text-xl font-bold text-[#1F1B1A] flex items-center gap-2">
+                        <ShoppingBag className="w-5 h-5 text-[#6B121C]" />
+                        <span>Customer Orders (Real-Time Live)</span>
+                      </h2>
+                      <p className="text-xs text-[#5A504D] mt-1">
+                        Live orders submitted by customers across websites and installed PWAs. Synchronized in real-time via Firestore.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold px-3 py-1.5 rounded-lg bg-[#6B121C]/10 text-[#6B121C] border border-[#6B121C]/20">
+                        Pending Orders: {pendingOrdersCount}
+                      </span>
+                    </div>
+                  </div>
+
+                  {customerOrders.length === 0 ? (
+                    <div className="text-center py-12 bg-[#FAF8F5] rounded-2xl border border-[#E8E2D8]">
+                      <ShoppingBag className="w-12 h-12 text-[#C5A059] mx-auto mb-3 opacity-50" />
+                      <h3 className="text-sm font-bold text-[#1F1B1A]">No customer orders yet</h3>
+                      <p className="text-xs text-[#5A504D] mt-1">
+                        When customers place orders from the website or Android PWA, they will appear here instantly with sound and banner alerts.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {customerOrders.map((order) => {
+                        const statusColors: Record<string, string> = {
+                          Pending: 'bg-amber-100 text-amber-800 border-amber-300',
+                          Confirmed: 'bg-blue-100 text-blue-800 border-blue-300',
+                          Delivered: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+                          Cancelled: 'bg-red-100 text-red-800 border-red-300',
+                        };
+
+                        return (
+                          <div
+                            key={order.id}
+                            className={`p-5 rounded-2xl border transition-all bg-white shadow-xs space-y-3 ${
+                              order.orderStatus === 'Pending'
+                                ? 'border-[#6B121C] ring-2 ring-[#6B121C]/15 bg-gradient-to-r from-amber-50/20 to-white'
+                                : 'border-[#E8E2D8]'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E8E2D8] pb-3">
+                              <div className="flex items-center gap-2.5">
+                                <span className="font-bold text-sm text-[#1F1B1A]">
+                                  {order.customerName}
+                                </span>
+                                <a
+                                  href={`tel:${order.phone}`}
+                                  className="text-xs font-mono font-semibold text-[#6B121C] bg-[#6B121C]/10 px-2.5 py-1 rounded-md hover:bg-[#6B121C]/20 flex items-center gap-1"
+                                >
+                                  <Phone className="w-3 h-3" />
+                                  <span>{order.phone}</span>
+                                </a>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-xs font-bold px-3 py-1 rounded-full border ${
+                                    statusColors[order.orderStatus] || 'bg-gray-100 text-gray-800 border-gray-300'
+                                  }`}
+                                >
+                                  {order.orderStatus}
+                                </span>
+                                <span className="text-[11px] text-[#8C7E7A] font-mono">
+                                  {order.createdAt?.toDate
+                                    ? order.createdAt.toDate().toLocaleString('en-IN', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })
+                                    : 'Just now'}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                              <div>
+                                <span className="font-semibold text-[#8C7E7A] block mb-0.5">Ordered Items & Details:</span>
+                                <p className="font-bold text-[#1F1B1A] bg-[#FAF8F5] p-2.5 rounded-xl border border-[#E8E2D8]">
+                                  {order.items}
+                                </p>
+                              </div>
+
+                              <div>
+                                <span className="font-semibold text-[#8C7E7A] block mb-0.5">Fulfillment & Total:</span>
+                                <div className="bg-[#FAF8F5] p-2.5 rounded-xl border border-[#E8E2D8] space-y-1">
+                                  <p className="text-[#5A504D]">
+                                    <strong>Mode & Date:</strong> {order.address}
+                                  </p>
+                                  <p className="text-[#6B121C] font-bold">
+                                    <strong>Estimated Total:</strong> ₹{order.totalAmount?.toLocaleString('en-IN') || 0}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#E8E2D8]">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[11px] font-bold text-[#8C7E7A]">Update Status:</span>
+                                {['Pending', 'Confirmed', 'Delivered', 'Cancelled'].map((st) => (
+                                  <button
+                                    key={st}
+                                    type="button"
+                                    onClick={() => handleUpdateOrderStatus(order.id, st)}
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                      order.orderStatus === st
+                                        ? 'bg-[#6B121C] text-white shadow-xs'
+                                        : 'bg-[#FAF8F5] text-[#5A504D] border border-[#D9D2C7] hover:bg-white'
+                                    }`}
+                                  >
+                                    {st}
+                                  </button>
+                                ))}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteOrder(order.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete Record</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ========================================================= */}
+              {/* TAB G: WHATSAPP ORDER SETTINGS */}
+              {/* ========================================================= */}
+              {activeTab === 'whatsapp' && (
                 <div className="space-y-6">
                   <div className="border-b border-[#E8E2D8] pb-4">
                     <h2 className="text-xl font-bold text-[#1F1B1A] flex items-center gap-2">

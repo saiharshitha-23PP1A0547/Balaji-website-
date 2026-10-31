@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Mutton product item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "pricePerKg": { "type": "number" },
+        "available": { "type": "boolean" },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "category": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "available"]
+    },
+    "ShopSettings": {
+      "title": "ShopSettings",
+      "description": "Shop settings and configuration",
+      "type": "object",
+      "properties": {
+        "shopName": { "type": "string", "maxLength": 200 },
+        "address": { "type": "string", "maxLength": 500 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "openingHours": { "type": "string", "maxLength": 500 },
+        "deliveryAvailable": { "type": "boolean" },
+        "minimumOrder": { "type": "number" },
+        "announcement": { "type": "string", "maxLength": 500 },
+        "announcementEnabled": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["shopName"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order record",
+      "type": "object",
+      "properties": {
+        "customerName": { "type": "string", "maxLength": 128 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "address": { "type": "string", "maxLength": 500 },
+        "items": { "type": "string", "maxLength": 2000 },
+        "totalAmount": { "type": "number" },
+        "orderStatus": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["customerName", "phone", "items"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Products collection"
+    },
+    "/shop/settings": {
+      "schema": { "$ref": "#/entities/ShopSettings" },
+      "description": "Shop settings document"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer orders collection"
+    }
+  }
+}

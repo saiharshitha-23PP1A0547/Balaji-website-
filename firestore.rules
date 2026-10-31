@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Products collection: public get/list, public create (for seeding), authenticated update/delete
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create: if true;
+      allow update, delete: if isSignedIn();
+    }
+
+    // Shop settings document: public get, public write if doesn't exist yet (for seeding), authenticated write otherwise
+    match /shop/settings {
+      allow get: if true;
+      allow write: if resource == null || isSignedIn();
+    }
+
+    // Orders collection: anyone can create an order, authenticated users/admins can get/list/update/delete
+    match /orders/{orderId} {
+      allow create: if request.resource.data.customerName is string 
+                    && request.resource.data.customerName.size() <= 128
+                    && request.resource.data.phone is string
+                    && request.resource.data.phone.size() <= 50
+                    && request.resource.data.items is string
+                    && request.resource.data.items.size() <= 2000;
+      allow get, list, update, delete: if isSignedIn();
+    }
+
+    // Test connection collection
+    match /test/connection {
+      allow read, write: if true;
+    }
+  }
+}

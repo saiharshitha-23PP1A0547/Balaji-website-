@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useBusiness } from '../context/BusinessContext';
 import { Menu, X, Phone, MessageSquare, MapPin } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export const Navbar: React.FC = () => {
   const { config, getWhatsAppLink, getPhoneCallLink, getDirectionsLink } = useBusiness();
@@ -100,6 +101,7 @@ export const Navbar: React.FC = () => {
 
             {/* Zone 3: Primary Actions */}
             <div className="hidden md:flex items-center gap-3">
+              <PWAInstallButton />
               <a
                 href={phoneLink.url}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#6B121C] border border-[#6B121C]/30 rounded-md hover:bg-[#6B121C]/5 transition-colors whitespace-nowrap"

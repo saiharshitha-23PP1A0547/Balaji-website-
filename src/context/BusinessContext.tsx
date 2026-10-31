@@ -1,5 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  getDocs,
+  onSnapshot,
+  updateDoc,
+} from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import {
   BUSINESS_CONFIG,
   PHOTO_REGISTRY,
   MuttonItem,
@@ -13,15 +23,16 @@ interface BusinessContextType {
   config: typeof BUSINESS_CONFIG;
   photos: Record<string, string | null>;
   muttonItems: MuttonItem[];
-  updateField: (key: keyof typeof BUSINESS_CONFIG, value: any) => void;
-  updatePhoto: (key: string, url: string | null) => void;
-  resetToDefaults: () => void;
+  updateField: (key: keyof typeof BUSINESS_CONFIG, value: any) => Promise<void>;
+  updatePhoto: (key: string, url: string | null) => Promise<void>;
+  updateMuttonItems: (items: MuttonItem[]) => Promise<void>;
+  resetToDefaults: () => Promise<void>;
   getWhatsAppLink: (message: string) => { url: string; isPlaceholder: boolean; encodedText: string };
   getPhoneCallLink: () => { url: string; isPlaceholder: boolean };
   getDirectionsLink: () => string;
   isOwnerHelperOpen: boolean;
   setIsOwnerHelperOpen: (open: boolean) => void;
-  refreshFromBackend: () => Promise<void>;
+  refreshFromFirestore: () => Promise<void>;
 }
 
 const BusinessContext = createContext<BusinessContextType | undefined>(undefined);
@@ -32,76 +43,186 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [muttonItems, setMuttonItems] = useState<MuttonItem[]>(DEFAULT_MUTTON_ITEMS);
   const [isOwnerHelperOpen, setIsOwnerHelperOpen] = useState(false);
 
-  // Fetch live public configuration from backend server
-  const refreshFromBackend = useCallback(async () => {
+  // Initialize Firestore seeding if empty
+  const seedFirestoreIfNeeded = useCallback(async () => {
     try {
-      const res = await fetch('/api/public/config');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.config) {
-          setConfig((prev) => ({
-            ...prev,
-            ...data.config,
-            SHOP_ADDRESS: data.config.SHOP_ADDRESS || prev.SHOP_ADDRESS,
-            BUSINESS_ADDRESS: data.config.SHOP_ADDRESS || prev.SHOP_ADDRESS,
-          }));
-        }
-        if (Array.isArray(data.photos)) {
-          const photoMap: Record<string, string | null> = { ...PHOTO_REGISTRY };
-          data.photos.forEach((item: any) => {
-            if (item.imageKey && item.customUrl) {
-              photoMap[item.imageKey] = item.customUrl;
-            }
+      const settingsRef = doc(db, 'shop', 'settings');
+      const settingsSnap = await getDoc(settingsRef);
+      if (!settingsSnap.exists()) {
+        await setDoc(settingsRef, {
+          ...BUSINESS_CONFIG,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      const productsRef = collection(db, 'products');
+      const productsSnap = await getDocs(productsRef);
+      if (productsSnap.empty) {
+        for (const item of DEFAULT_MUTTON_ITEMS) {
+          const itemRef = doc(db, 'products', item.id);
+          await setDoc(itemRef, {
+            ...item,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           });
-          setPhotos(photoMap);
-        }
-        if (Array.isArray(data.muttonItems) && data.muttonItems.length > 0) {
-          setMuttonItems(data.muttonItems);
         }
       }
-    } catch {
-      // Offline fallback: keep static config
+    } catch (error) {
+      console.error('Error seeding initial Firestore data:', error);
     }
   }, []);
 
+  const refreshFromFirestore = useCallback(async () => {
+    try {
+      await seedFirestoreIfNeeded();
+      const settingsSnap = await getDoc(doc(db, 'shop', 'settings'));
+      if (settingsSnap.exists()) {
+        const data = settingsSnap.data();
+        setConfig((prev) => ({
+          ...prev,
+          ...data,
+          SHOP_ADDRESS: data.SHOP_ADDRESS || data.address || prev.SHOP_ADDRESS,
+          BUSINESS_ADDRESS: data.SHOP_ADDRESS || data.address || prev.SHOP_ADDRESS,
+        }));
+      }
+
+      const productsSnap = await getDocs(collection(db, 'products'));
+      if (!productsSnap.empty) {
+        const items: MuttonItem[] = [];
+        productsSnap.forEach((d) => {
+          items.push(d.data() as MuttonItem);
+        });
+        if (items.length > 0) {
+          setMuttonItems(items);
+        }
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, 'shop/settings');
+    }
+  }, [seedFirestoreIfNeeded]);
+
+  // Real-time onSnapshot synchronization across devices & PWA
   useEffect(() => {
-    refreshFromBackend();
+    seedFirestoreIfNeeded();
 
-    // Sync on window focus
-    const handleFocus = () => refreshFromBackend();
-    window.addEventListener('focus', handleFocus);
+    const unsubSettings = onSnapshot(
+      doc(db, 'shop', 'settings'),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setConfig((prev) => ({
+            ...prev,
+            ...data,
+            SHOP_ADDRESS: data.SHOP_ADDRESS || data.address || prev.SHOP_ADDRESS,
+            BUSINESS_ADDRESS: data.SHOP_ADDRESS || data.address || prev.SHOP_ADDRESS,
+          }));
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, 'shop/settings');
+      }
+    );
 
-    // Periodic sync every 25 seconds
-    const interval = setInterval(refreshFromBackend, 25000);
+    const unsubProducts = onSnapshot(
+      collection(db, 'products'),
+      (snapshot) => {
+        const items: MuttonItem[] = [];
+        snapshot.forEach((d) => {
+          items.push(d.data() as MuttonItem);
+        });
+        if (items.length > 0) {
+          setMuttonItems(items);
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'products');
+      }
+    );
 
     return () => {
-      window.removeEventListener('focus', handleFocus);
-      clearInterval(interval);
+      unsubSettings();
+      unsubProducts();
     };
-  }, [refreshFromBackend]);
+  }, [seedFirestoreIfNeeded]);
 
-  const updateField = (key: keyof typeof BUSINESS_CONFIG, value: any) => {
-    setConfig((prev) => {
-      const next = { ...prev, [key]: value };
-      if (key === 'SHOP_ADDRESS') {
-        next.BUSINESS_ADDRESS = value;
-      } else if (key === 'BUSINESS_ADDRESS') {
-        next.SHOP_ADDRESS = value;
+  const updateField = async (key: keyof typeof BUSINESS_CONFIG, value: any) => {
+    const next = { ...config, [key]: value };
+    if (key === 'SHOP_ADDRESS') {
+      next.BUSINESS_ADDRESS = value;
+    } else if (key === 'BUSINESS_ADDRESS') {
+      next.SHOP_ADDRESS = value;
+    }
+    setConfig(next);
+
+    try {
+      const settingsRef = doc(db, 'shop', 'settings');
+      await updateDoc(settingsRef, {
+        [key]: value,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      // If doc doesn't exist yet, setDoc
+      try {
+        const settingsRef = doc(db, 'shop', 'settings');
+        await setDoc(settingsRef, { ...next, updatedAt: new Date().toISOString() }, { merge: true });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, 'shop/settings');
       }
-      return next;
-    });
+    }
   };
 
-  const updatePhoto = (key: string, url: string | null) => {
+  const updatePhoto = async (key: string, url: string | null) => {
     setPhotos((prev) => ({
       ...prev,
       [key]: url,
     }));
+    try {
+      const settingsRef = doc(db, 'shop', 'settings');
+      await setDoc(
+        settingsRef,
+        {
+          photos: { ...photos, [key]: url },
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'shop/settings');
+    }
   };
 
-  const resetToDefaults = () => {
+  const updateMuttonItems = async (newItems: MuttonItem[]) => {
+    setMuttonItems(newItems);
+    try {
+      for (const item of newItems) {
+        const itemRef = doc(db, 'products', item.id);
+        await setDoc(
+          itemRef,
+          {
+            ...item,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'products');
+    }
+  };
+
+  const resetToDefaults = async () => {
     setConfig(BUSINESS_CONFIG);
     setPhotos(PHOTO_REGISTRY);
+    setMuttonItems(DEFAULT_MUTTON_ITEMS);
+    try {
+      const settingsRef = doc(db, 'shop', 'settings');
+      await setDoc(settingsRef, {
+        ...BUSINESS_CONFIG,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'shop/settings');
+    }
   };
 
   const getWhatsAppLink = (message: string) => {
@@ -124,13 +245,14 @@ export const BusinessProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         muttonItems,
         updateField,
         updatePhoto,
+        updateMuttonItems,
         resetToDefaults,
         getWhatsAppLink,
         getPhoneCallLink,
         getDirectionsLink,
         isOwnerHelperOpen,
         setIsOwnerHelperOpen,
-        refreshFromBackend,
+        refreshFromFirestore,
       }}
     >
       {children}

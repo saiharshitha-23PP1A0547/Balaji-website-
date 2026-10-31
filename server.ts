@@ -99,7 +99,94 @@ interface Session {
   lastActive: number;
 }
 
-const activeSessions = new Map<string, Session>();
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+
+function loadSessions(): Map<string, Session> {
+  const map = new Map<string, Session>();
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const raw = fs.readFileSync(SESSIONS_FILE, 'utf-8');
+      const list: Session[] = JSON.parse(raw);
+      const now = Date.now();
+      if (Array.isArray(list)) {
+        for (const s of list) {
+          if (s && s.token && now < s.expiresAt && (now - s.lastActive) <= SESSION_IDLE_TIMEOUT_MS) {
+            map.set(s.token, s);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load sessions file:', err);
+  }
+  return map;
+}
+
+function saveSessions(sessions: Map<string, Session>) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const now = Date.now();
+    const activeList = Array.from(sessions.values()).filter(
+      (s) => now < s.expiresAt && (now - s.lastActive) <= SESSION_IDLE_TIMEOUT_MS
+    );
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(activeList, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Failed to write sessions file:', err);
+  }
+}
+
+// Global active sessions map initialized from persistent store
+const activeSessions = loadSessions();
+
+function getSession(token: string): Session | null {
+  if (!token) return null;
+  let session = activeSessions.get(token);
+  if (!session) {
+    // If written by another instance or file reload, refresh from disk
+    const reloaded = loadSessions();
+    session = reloaded.get(token);
+    if (session) {
+      activeSessions.set(token, session);
+    }
+  }
+  if (!session) return null;
+
+  const now = Date.now();
+  if (now > session.expiresAt || (now - session.lastActive) > SESSION_IDLE_TIMEOUT_MS) {
+    activeSessions.delete(token);
+    saveSessions(activeSessions);
+    return null;
+  }
+
+  session.lastActive = now;
+  saveSessions(activeSessions);
+  return session;
+}
+
+function createSession(username: string, email: string): Session {
+  const token = crypto.randomBytes(32).toString('hex');
+  const now = Date.now();
+  const session: Session = {
+    token,
+    username,
+    email,
+    createdAt: now,
+    expiresAt: now + SESSION_TTL_MS,
+    lastActive: now,
+  };
+  activeSessions.set(token, session);
+  saveSessions(activeSessions);
+  return session;
+}
+
+function destroySession(token: string) {
+  if (token) {
+    activeSessions.delete(token);
+    saveSessions(activeSessions);
+  }
+}
 
 // Cryptographic Password Hashing Utilities
 function generateSalt(): string {
@@ -331,14 +418,15 @@ loadShopData();
 
 // Extract Session Token from Request
 function extractSessionToken(req: Request): string | null {
-  // Check cookie first
-  if (req.cookies && req.cookies[SESSION_COOKIE_NAME]) {
-    return req.cookies[SESSION_COOKIE_NAME];
-  }
-  // Check Authorization: Bearer <token>
+  // Check Authorization: Bearer <token> first (device-explicit token for multi-device/iframe)
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7).trim();
+    const bearer = authHeader.substring(7).trim();
+    if (bearer) return bearer;
+  }
+  // Check cookie
+  if (req.cookies && req.cookies[SESSION_COOKIE_NAME]) {
+    return req.cookies[SESSION_COOKIE_NAME];
   }
   return null;
 }
@@ -352,22 +440,13 @@ function requireAdminAuth(req: Request, res: Response, next: NextFunction) {
     return;
   }
 
-  const session = activeSessions.get(token);
+  const session = getSession(token);
   if (!session) {
+    res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
     res.status(401).json({ error: 'Unauthorized: Invalid or expired session' });
     return;
   }
 
-  const now = Date.now();
-  if (now > session.expiresAt || (now - session.lastActive) > SESSION_IDLE_TIMEOUT_MS) {
-    activeSessions.delete(token);
-    res.clearCookie(SESSION_COOKIE_NAME);
-    res.status(401).json({ error: 'Unauthorized: Session timed out due to inactivity' });
-    return;
-  }
-
-  // Refresh activity
-  session.lastActive = now;
   (req as any).adminSession = session;
   next();
 }
@@ -444,32 +523,21 @@ async function startServer() {
       saveShopData(data);
     }
 
-    // Generate secure session token
-    const token = crypto.randomBytes(32).toString('hex');
-    const now = Date.now();
-    const session: Session = {
-      token,
-      username: stored.username,
-      email: stored.email,
-      createdAt: now,
-      expiresAt: now + SESSION_TTL_MS,
-      lastActive: now,
-    };
+    // Generate persistent secure session token for this device
+    const session = createSession(stored.username, stored.email);
 
-    activeSessions.set(token, session);
-
-    // Set secure HTTP-only cookie
-    res.cookie(SESSION_COOKIE_NAME, token, {
+    // Set secure HTTP-only cookie with sameSite lax for iframe/multi-tab compatibility
+    res.cookie(SESSION_COOKIE_NAME, session.token, {
       httpOnly: true,
       secure: IS_PROD,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: SESSION_TTL_MS,
       path: '/',
     });
 
     res.json({
       success: true,
-      token,
+      token: session.token,
       user: {
         username: stored.username,
         email: stored.email,
@@ -481,7 +549,7 @@ async function startServer() {
     res.set({ 'Content-Type': 'application/json' });
     const token = extractSessionToken(req);
     if (token) {
-      activeSessions.delete(token);
+      destroySession(token);
     }
     res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
     res.json({ success: true, message: 'Logged out successfully' });
@@ -495,24 +563,17 @@ async function startServer() {
       return;
     }
 
-    const session = activeSessions.get(token);
+    const session = getSession(token);
     if (!session) {
+      res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
       res.status(401).json({ success: false, authenticated: false, error: 'Session invalid or expired' });
       return;
     }
 
-    const now = Date.now();
-    if (now > session.expiresAt || (now - session.lastActive) > SESSION_IDLE_TIMEOUT_MS) {
-      activeSessions.delete(token);
-      res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
-      res.status(401).json({ success: false, authenticated: false, error: 'Session expired' });
-      return;
-    }
-
-    session.lastActive = now;
     res.json({
       success: true,
       authenticated: true,
+      token: session.token,
       user: {
         username: session.username,
         email: session.email,

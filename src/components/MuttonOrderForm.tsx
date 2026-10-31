@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useBusiness } from '../context/BusinessContext';
 import { CUTTING_PREFERENCES, MuttonItem } from '../config/businessConfig';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import {
   MessageSquare,
   Copy,
@@ -76,7 +78,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
   }, [muttonItems, selectedItemId, defaultItem]);
 
   // Quantity selection state
-  // Can be a preset ID ('250g', '500g', etc.) or 'custom'
   const [selectedPresetId, setSelectedPresetId] = useState<string>(() => {
     if (initialQuantity === 0.25) return '250g';
     if (initialQuantity === 0.5) return '500g';
@@ -124,7 +125,7 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
     return preset ? preset.kg : 1.0;
   }, [isCustomQuantity, customValue, customUnit, selectedPresetId]);
 
-  // Formatted quantity display string (e.g. "500 g" or "1.5 kg")
+  // Formatted quantity display string
   const quantityDisplayString = useMemo(() => {
     if (isCustomQuantity) {
       const num = parseFloat(customValue) || 0;
@@ -159,7 +160,7 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
     return `₹${estimatedPriceNumber.toLocaleString('en-IN')}`;
   }, [hasConfiguredPrice, estimatedPriceNumber]);
 
-  // WhatsApp price text (as requested: "₹[calculated price]" or "Contact us")
+  // WhatsApp price text
   const whatsappPriceText = useMemo(() => {
     if (!hasConfiguredPrice || estimatedPriceNumber === null) {
       return 'Contact us';
@@ -169,7 +170,7 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
 
   const isClosed = config.SHOP_STATUS === 'CLOSED';
 
-  // Format additional requirements combining cutting preference and notes
+  // Format additional requirements
   const formattedRequirements = useMemo(() => {
     const parts: string[] = [];
     if (cuttingPref && cuttingPref !== 'None') {
@@ -187,7 +188,7 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
     return parts.length > 0 ? parts.join(' | ') : 'None';
   }, [cuttingPref, orderType, preferredDate, preferredTime, additionalRequirements]);
 
-  // Format the complete order message for WhatsApp strictly matching required template
+  // Format the complete order message for WhatsApp
   const generateOrderMessage = () => {
     const itemName = selectedItem ? selectedItem.name : 'Fresh Mutton';
     const cName = customerName.trim() || 'Not specified';
@@ -205,12 +206,27 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
   const message = generateOrderMessage();
   const whatsappInfo = getWhatsAppLink(message);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAvailable) {
       return;
     }
     setFormSubmitted(true);
+
+    try {
+      await addDoc(collection(db, 'orders'), {
+        customerName: customerName.trim(),
+        phone: phoneNumber.trim(),
+        address: `${orderType} - ${preferredDate} (${preferredTime})`,
+        items: `${selectedItem ? selectedItem.name : 'Fresh Mutton'} (${quantityDisplayString}) [Cut: ${cuttingPref}]`,
+        totalAmount: estimatedPriceNumber || 0,
+        orderStatus: 'Pending',
+        createdAt: serverTimestamp(),
+      });
+    } catch (err: unknown) {
+      handleFirestoreError(err, OperationType.CREATE, 'orders');
+    }
+
     window.open(whatsappInfo.url, '_blank', 'noopener,noreferrer');
   };
 
@@ -313,7 +329,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
             })}
           </div>
 
-          {/* Warning if current item is unavailable */}
           {!isAvailable && (
             <div className="mt-3 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800 flex items-center gap-2">
               <XCircle className="w-4 h-4 text-red-600 shrink-0" />
@@ -338,7 +353,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
             </span>
           </div>
 
-          {/* Quick Preset Buttons (250g, 500g, 750g, 1kg, 1.5kg, 2kg, 2.5kg, 3kg, Custom) */}
           <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
             {QUANTITY_PRESETS.map((preset) => {
               const isSelected = !isCustomQuantity && selectedPresetId === preset.id;
@@ -375,7 +389,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
               );
             })}
 
-            {/* Custom Quantity Button */}
             <button
               type="button"
               onClick={() => setIsCustomQuantity(true)}
@@ -396,7 +409,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
             </button>
           </div>
 
-          {/* Custom Quantity Input Panel */}
           {isCustomQuantity && (
             <div className="mt-3 p-4 rounded-xl bg-[#FAF8F5] border border-[#E8E2D8] flex flex-col sm:flex-row items-center gap-3">
               <div className="w-full sm:flex-1">
@@ -453,7 +465,7 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
         </div>
 
         {/* ========================================================= */}
-        {/* REQUIRED DISPLAY SECTION: Selected item, Quantity, Estimated price */}
+        {/* SUMMARY SECTION */}
         {/* ========================================================= */}
         <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#FAF8F5] via-[#FFFDF8] to-[#FAF8F5] border-2 border-[#C5A059]/40 shadow-xs">
           <div className="text-[10px] uppercase font-bold tracking-wider text-[#8C7E7A] mb-3 flex items-center gap-1.5">
@@ -462,7 +474,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-[#E8E2D8]">
-            {/* Display: Selected item */}
             <div className="pt-2 sm:pt-0 sm:pr-3">
               <span className="text-[11px] font-semibold text-[#8C7E7A] uppercase tracking-wide block">
                 Selected Item
@@ -479,7 +490,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
               </div>
             </div>
 
-            {/* Display: Quantity */}
             <div className="pt-3 sm:pt-0 sm:px-3">
               <span className="text-[11px] font-semibold text-[#8C7E7A] uppercase tracking-wide block">
                 Quantity
@@ -492,7 +502,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
               </span>
             </div>
 
-            {/* Display: Estimated price */}
             <div className="pt-3 sm:pt-0 sm:pl-3 flex flex-col justify-center">
               <span className="text-[11px] font-semibold text-[#8C7E7A] uppercase tracking-wide block">
                 Estimated Price
@@ -510,7 +519,7 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
         </div>
 
         {/* ========================================================= */}
-        {/* STEP 3: CUSTOMER NAME & PHONE */}
+        {/* CUSTOMER CONTACT */}
         {/* ========================================================= */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -544,7 +553,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
           </div>
         </div>
 
-        {/* Cutting Preference & Order Type */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-[#1F1B1A] uppercase tracking-wide mb-1.5">
@@ -595,7 +603,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
           </div>
         </div>
 
-        {/* Date & Time */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-[#1F1B1A] uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
@@ -628,7 +635,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
           </div>
         </div>
 
-        {/* STEP 4: ADDITIONAL REQUIREMENTS */}
         <div>
           <label className="block text-xs font-semibold text-[#1F1B1A] uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
             <FileText className="w-3.5 h-3.5 text-[#C5A059]" />
@@ -643,7 +649,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
           />
         </div>
 
-        {/* Shop Closure Notice */}
         {isClosed && (
           <div className="p-3.5 rounded-xl bg-[#871924]/10 border border-[#871924]/30 text-xs text-[#6B121C] flex items-start gap-2.5">
             <AlertTriangle className="w-4 h-4 text-[#871924] shrink-0 mt-0.5" />
@@ -664,7 +669,6 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
           </div>
         )}
 
-        {/* Submit Actions */}
         <div className="pt-2 flex flex-col sm:flex-row gap-3">
           <button
             type="submit"
@@ -683,7 +687,7 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
                 ? 'ITEM CURRENTLY UNAVAILABLE'
                 : isClosed
                 ? 'ORDER ON WHATSAPP (CLOSED TODAY)'
-                : 'Order on WhatsApp'}
+                : 'Order on WhatsApp & Save'}
             </span>
           </button>
 
@@ -700,7 +704,7 @@ export const MuttonOrderForm: React.FC<MuttonOrderFormProps> = ({
 
         {formSubmitted && (
           <p className="text-center text-xs text-[#1E7E34] font-medium pt-1">
-            ✓ Order message prepared for WhatsApp. If WhatsApp didn't open automatically, click the button above again or use 'Copy Order Text'.
+            ✓ Order saved to cloud database and WhatsApp message prepared. If WhatsApp didn't open automatically, click the button above again or use 'Copy Order Text'.
           </p>
         )}
       </form>

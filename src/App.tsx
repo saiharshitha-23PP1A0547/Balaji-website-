@@ -24,6 +24,7 @@ import { Reviews } from './components/Reviews';
 import { ContactLocation } from './components/ContactLocation';
 import { Footer } from './components/Footer';
 import { MobileStickyBar } from './components/MobileStickyBar';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 const StructuredDataSync: React.FC = () => {
   const { config } = useBusiness();
@@ -123,6 +124,9 @@ const PublicWebsite: React.FC = () => {
 
         {/* Mobile Sticky Bottom Action Bar (CALL, WHATSAPP, ORDER, DIRECTIONS) */}
         <MobileStickyBar />
+
+        {/* Offline Connectivity Status Notification */}
+        <OfflineIndicator />
       </div>
     </>
   );

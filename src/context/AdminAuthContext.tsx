@@ -23,19 +23,38 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Helper to read current token from storage if available
   const getAuthHeader = (): Record<string, string> => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
+      if (token) {
+        return { Authorization: `Bearer ${token}` };
+      }
+    } catch {
+      // localStorage may fail in restricted environments
     }
-    return headers;
+    return {};
   };
 
+  /**
+   * Checks authentication status directly from the backend.
+   * Completely independent from local storage state:
+   * - Queries /api/auth/me immediately with credentials: 'include'.
+   * - Supplies Bearer header if token exists in localStorage, but never requires it.
+   * - Manages loading state cleanly with a guaranteed finally block.
+   */
   const checkAuth = useCallback(async (): Promise<boolean> => {
+    setIsLoading(true);
     try {
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        ...getAuthHeader(),
+      };
+
       const res = await fetch('/api/auth/me', {
-        headers: getAuthHeader(),
+        method: 'GET',
+        headers,
+        credentials: 'include',
       });
 
       const contentType = res.headers.get('content-type') || '';
@@ -44,22 +63,50 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         if (data.authenticated && data.user) {
           setUser(data.user);
           setIsAuthenticated(true);
-          setIsLoading(false);
+          // Sync token returned from backend to localStorage if present
+          if (data.token) {
+            try {
+              localStorage.setItem(TOKEN_KEY, data.token);
+            } catch {
+              // Ignore storage errors in restricted contexts
+            }
+          }
           return true;
         }
       }
+
+      // Backend session is not authenticated or expired
+      try {
+        localStorage.removeItem(TOKEN_KEY);
+      } catch {
+        // Ignore storage errors
+      }
+      setUser(null);
+      setIsAuthenticated(false);
+      return false;
     } catch (err) {
       console.error('Session check failed:', err);
+      setUser(null);
+      setIsAuthenticated(false);
+      return false;
+    } finally {
+      setIsLoading(false);
     }
-
-    setUser(null);
-    setIsAuthenticated(false);
-    setIsLoading(false);
-    return false;
   }, []);
 
+  // Fetch session status immediately upon app load
   useEffect(() => {
-    checkAuth();
+    let isMounted = true;
+
+    const initAuth = async () => {
+      await checkAuth();
+    };
+
+    initAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, [checkAuth]);
 
   const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
@@ -67,7 +114,11 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        credentials: 'include',
         body: JSON.stringify({ username, password }),
       });
 
@@ -95,30 +146,44 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
 
       if (data.token) {
-        localStorage.setItem(TOKEN_KEY, data.token);
+        try {
+          localStorage.setItem(TOKEN_KEY, data.token);
+        } catch {
+          // Ignore storage errors
+        }
       }
       setUser(data.user);
       setIsAuthenticated(true);
-      setIsLoading(false);
       return { success: true };
     } catch (err: any) {
-      setIsLoading(false);
       return { success: false, error: err.message || 'Network error during login' };
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const logout = async () => {
+    setIsLoading(true);
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
-        headers: getAuthHeader(),
+        headers: {
+          Accept: 'application/json',
+          ...getAuthHeader(),
+        },
+        credentials: 'include',
       });
     } catch {
-      // ignore
+      // Ignore network errors on logout
     } finally {
-      localStorage.removeItem(TOKEN_KEY);
+      try {
+        localStorage.removeItem(TOKEN_KEY);
+      } catch {
+        // Ignore storage errors
+      }
       setUser(null);
       setIsAuthenticated(false);
+      setIsLoading(false);
     }
   };
 
@@ -147,6 +212,10 @@ export const useAdminAuth = () => {
 };
 
 export function getAdminAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem(TOKEN_KEY);
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  try {
+    const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
 }

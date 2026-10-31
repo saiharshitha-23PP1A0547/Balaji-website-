@@ -2,9 +2,9 @@
   "adminUser": {
     "username": "admin",
     "email": "admin@balajimuttonshop.com",
-    "salt": "e4562c812f831c49d2abec4fdcbfa438",
-    "passwordHash": "2708c4fa5aca54c96348ec66ead78b9c1d97f5dea1aed638a101eea26e21b2f9577418729c82ce2c0407400c47d1fa55642959360625f56e9f3e7bbeb7fc29b1",
-    "updatedAt": "2026-10-04T12:02:34.869Z"
+    "salt": "ef0a7ce5e067f8615099e05fe3bbb5b4",
+    "passwordHash": "4f7cb5499f89dc1a67113123a38d7384c6d9c3d1253cdbd28e8780915d6742474671674cbf26e1ecb88cce13c61645c56497977d4e0ac97f7068385ddb5cebc5",
+    "updatedAt": "2026-10-05T17:06:49.653Z"
   },
   "config": {
     "BUSINESS_NAME": "Balaji Mutton Shop",
